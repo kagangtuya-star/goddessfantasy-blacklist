@@ -10,8 +10,8 @@
 // @grant        GM_getValue
 // @grant        GM_addStyle
 // @run-at       document-body
-// @updateURL    https://cdn.jsdelivr.net/gh/kagangtuya-star/goddessfantasy-blacklist/goddessfantasy-blocker.user.js
-// @downloadURL  https://cdn.jsdelivr.net/gh/kagangtuya-star/goddessfantasy-blacklist/goddessfantasy-blocker.user.js
+// @updateURL    https://cdn.jsdelivr.net/gh/kagangtuya-star/goddessfantasy-blacklist/goddessfantasy-blacklist.user.js
+// @downloadURL  https://cdn.jsdelivr.net/gh/kagangtuya-star/goddessfantasy-blacklist/goddessfantasy-blacklist.user.js
 // @license MIT
 // ==/UserScript==
 
