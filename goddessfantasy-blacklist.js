@@ -10,6 +10,7 @@
 // @grant        GM_getValue
 // @grant        GM_addStyle
 // @run-at       document-body
+// @license MIT
 // ==/UserScript==
 
 (function() {
