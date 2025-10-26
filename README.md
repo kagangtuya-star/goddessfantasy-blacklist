@@ -3,7 +3,7 @@
 
 [纯美苹果园-黑名单增强脚本](https://greasyfork.org/zh-CN/scripts/553725-%E7%BA%AF%E7%BE%8E%E8%8B%B9%E6%9E%9C%E5%9B%AD-%E9%BB%91%E5%90%8D%E5%8D%95%E5%A2%9E%E5%BC%BA%E8%84%9A%E6%9C%AC)
 
-[点此安装](https://cdn.jsdelivr.net/gh/kagangtuya-star/goddessfantasy-blacklist/goddessfantasy-blocker.user.js)
+[点此安装](https://cdn.jsdelivr.net/gh/kagangtuya-star/goddessfantasy-blacklist/goddessfantasy-blacker.user.js)
 
 
 #### 核心屏蔽功能
