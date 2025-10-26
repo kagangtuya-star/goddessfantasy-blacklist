@@ -1,0 +1,2 @@
+# goddessfantasy-blacklist
+适用于纯美苹果园论坛的tampermonkey黑名单功能增强脚本
