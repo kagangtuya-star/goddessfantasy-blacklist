@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         纯美苹果园 - 黑名单增强脚本
 // @namespace    https://www.goddessfantasy.net/
-// @version      1.0.1
+// @version      1.0.2
 // @description  纯美苹果园的黑名单功能脚本
 // @author       星尘
 // @match        *://*.goddessfantasy.net/bbs/index.php*
@@ -26,16 +26,26 @@
         postAuthor: '.poster h4 a[title^="查看配置文件"]',
         topicContainer: 'div.windowbg',
         topicAuthor: '.info p.floatleft a.preview',
-        quoteBlock: 'blockquote.bbc_standard_quote',
+        allQuoteBlock: 'blockquote',
+        standardQuoteBlock: 'blockquote.bbc_standard_quote',
+        alternateQuoteBlock: 'blockquote.bbc_alternate_quote',
         quoteAuthorCite: 'cite'
     };
+
+    const BLOCKING_MODES = [
+        '关闭屏蔽',
+        '仅屏蔽楼层和主题',
+        '屏蔽楼层+主题+1级引用级别(即原版)',
+        '屏蔽楼层+主题+子引用级别',
+    ];
 
     // ===============================================================
     // ======================  核心代码部分  =========================
     // ===============================================================
     const STORAGE_KEY = 'GF_BlockedUsersList_v2_6'; // 与V2.6数据兼容
     let blockedUsersData = [];
-    let isBlockingDisabled = sessionStorage.getItem('GF_isBlockingDisabled') === 'true';
+    let isBlockingDisabled = localStorage.getItem('GF_isBlockingDisabled') === 'true';
+    let blockLevel = localStorage.getItem('GF_blockLevel') || 0;
 
     async function loadBlockedUsers() {
         let storedData = await GM_getValue(STORAGE_KEY, []);
@@ -61,7 +71,8 @@
     }
 
     function runBlocker() {
-        if (isBlockingDisabled) return;
+        if (blockLevel < 1) return; // 屏蔽功能关闭
+        // level 1: 屏蔽帖子和主题作者
         const blockedLower = getBlockedUserNamesLower();
         if (blockedLower.length === 0) return;
         document.querySelectorAll('div.windowbg:not([data-gf-processed])').forEach(container => {
@@ -76,16 +87,30 @@
                 }
             }
         });
-        document.querySelectorAll(`${SELECTORS.quoteBlock}:not([data-gf-processed])`).forEach(quote => {
-            quote.setAttribute('data-gf-processed', 'true');
-            const citeElement = quote.querySelector(SELECTORS.quoteAuthorCite);
-            if (citeElement?.textContent) {
-                const match = citeElement.textContent.match(/引述:\s*([^ ]+)\s*于/);
-                if (match?.[1] && blockedLower.includes(match[1].trim().toLowerCase())) {
-                    quote.style.display = 'none';
+        // level 2: + 屏蔽1级引用, 即原版. 只处理第一级 standardQuoteBlock 的引用块, 会把整个引用块删掉. 
+        if (blockLevel >= 2)
+            document.querySelectorAll(`${SELECTORS.standardQuoteBlock}:not([data-gf-processed])`).forEach(quote => {
+                quote.setAttribute('data-gf-processed', 'true');
+                const citeElement = quote.querySelector(SELECTORS.quoteAuthorCite);
+                if (citeElement?.textContent) {
+                    const match = citeElement.textContent.match(/引述:\s*([^ ]+)\s*于/);
+                    if (match?.[1] && blockedLower.includes(match[1].trim().toLowerCase())) {
+                        quote.style.display = 'none';
+                    }
                 }
-            }
-        });
+            });
+        // level 3: + 屏蔽全部子引用, 包括 alternateQuoteBlock. 如果 1 级引用不被屏蔽, 则只屏蔽 alternateQuoteBlock (也会把其嵌套里的引用一起删掉.)
+        if (blockLevel >= 3)
+            document.querySelectorAll(`${SELECTORS.alternateQuoteBlock}:not([data-gf-processed])`).forEach(quote => {
+                quote.setAttribute('data-gf-processed', 'true');
+                const citeElement = quote.querySelector(SELECTORS.quoteAuthorCite);
+                if (citeElement?.textContent) {
+                    const match = citeElement.textContent.match(/引述:\s*([^ ]+)\s*于/);
+                    if (match?.[1] && blockedLower.includes(match[1].trim().toLowerCase())) {
+                        quote.style.display = 'none';
+                    }
+                }
+            });
     }
 
     function injectBlockButtons() {
@@ -182,12 +207,24 @@
             document.getElementById('blocker-settings-btn').addEventListener('click', (e) => { e.preventDefault(); openSettingsPanel(); });
 
             const toggleLi = document.createElement('li');
-            toggleLi.innerHTML = `<a href="#" id="blocker-toggle-btn">${isBlockingDisabled ? '开启屏蔽' : '关闭屏蔽'}</a>`;
+            toggleLi.innerHTML = `
+                <select id="blocker-select">
+                    <option value=0>${BLOCKING_MODES[0]}</option>
+                    <option value=1>${BLOCKING_MODES[1]}</option>
+                    <option value=2>${BLOCKING_MODES[2]}</option>
+                    <option value=3>${BLOCKING_MODES[3]}</option>
+                </select>
+            `;
             topInfo.insertBefore(toggleLi, settingsLi.nextSibling);
-            document.getElementById('blocker-toggle-btn').addEventListener('click', (e) => {
-                e.preventDefault();
-                sessionStorage.setItem('GF_isBlockingDisabled', !isBlockingDisabled);
-                alert(`屏蔽功能已${!isBlockingDisabled ? '关闭' : '开启'}，页面将刷新。`);
+
+            
+            const select = document.getElementById('blocker-select');
+            const saved = localStorage.getItem('GF_blockLevel') || '0';
+            select.value = saved;
+
+            // 选择后自动应用（不需要按钮）
+            select.addEventListener('change', () => {
+                localStorage.setItem('GF_blockLevel', select.value);
                 location.reload();
             });
         }
