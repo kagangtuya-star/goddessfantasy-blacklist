@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         纯美苹果园 - 黑名单增强脚本
 // @namespace    https://www.goddessfantasy.net/
-// @version      1.0.3 
+// @version      1.0.4 
 // @description  纯美苹果园的黑名单功能脚本
 // @author       星尘
 // @match        *://*.goddessfantasy.net/bbs/index.php*
