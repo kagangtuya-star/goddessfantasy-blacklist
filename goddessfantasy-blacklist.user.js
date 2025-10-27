@@ -135,7 +135,7 @@
 
     function injectBlockButtons() {
         if (isBlockingDisabled) return;
-        document.querySelectorAll(`${SELECTORS.postAuthor}, ${SELECTORS.topicAuthor}`).forEach(el => {
+        document.querySelectorAll(SELECTORS.postAuthor).forEach(el => {
             if (el.dataset.blockBtnInjected) return;
             el.dataset.blockBtnInjected = 'true';
             const authorName = el.textContent.trim();
