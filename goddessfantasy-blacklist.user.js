@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         纯美苹果园 - 黑名单增强脚本
 // @namespace    https://www.goddessfantasy.net/
-// @version      1.0.1
+// @version      1.0.3 
 // @description  纯美苹果园的黑名单功能脚本
 // @author       星尘
 // @match        *://*.goddessfantasy.net/bbs/index.php*
@@ -26,35 +26,62 @@
         postAuthor: '.poster h4 a[title^="查看配置文件"]',
         topicContainer: 'div.windowbg',
         topicAuthor: '.info p.floatleft a.preview',
-        quoteBlock: 'blockquote.bbc_standard_quote',
+        allQuoteBlock: 'blockquote',
+        standardQuoteBlock: 'blockquote.bbc_standard_quote',
+        alternateQuoteBlock: 'blockquote.bbc_alternate_quote',
         quoteAuthorCite: 'cite'
     };
+
+    const BLOCKING_MODES = [
+        '关闭屏蔽', // 0
+        '仅屏蔽楼层和主题', // 1
+        '屏蔽楼层+主题+1级引用级别(即原版)', // 2
+        '屏蔽楼层+主题+子引用级别', // 3
+    ];
 
     // ===============================================================
     // ======================  核心代码部分  =========================
     // ===============================================================
-    const STORAGE_KEY = 'GF_BlockedUsersList_v2_6'; // 与V2.6数据兼容
-    let blockedUsersData = [];
-    let isBlockingDisabled = sessionStorage.getItem('GF_isBlockingDisabled') === 'true';
+    // [修改] 拆分存储键
+    const STORAGE_KEY_USERS = 'GF_BlockedUsersList_v2_6'; // 与V2.6数据兼容
+    const STORAGE_KEY_LEVEL = 'GF_BlockLevel'; // [修改] 新增: 存储屏蔽级别
 
-    async function loadBlockedUsers() {
-        let storedData = await GM_getValue(STORAGE_KEY, []);
+    let blockedUsersData = [];
+    
+    // [修改] 整合全局变量
+    let blockLevel = 2;
+    let isBlockingDisabled = sessionStorage.getItem('GF_isBlockingDisabled') === 'true'; // 临时开关: 从 sessionStorage 取
+
+    async function loadSettings() {
+        // 1. 加载黑名单
+        let storedData = await GM_getValue(STORAGE_KEY_USERS, []);
         if (storedData.length > 0 && typeof storedData[0] === 'string') {
             console.log('[屏蔽脚本] 检测到旧版数据，正在迁移...');
             storedData = storedData.map(user => ({ name: user, note: '', added: Date.now() }));
             await saveBlockedUsers(storedData);
         }
         blockedUsersData = storedData;
+
+        // 2. 加载屏蔽级别
+        blockLevel = await GM_getValue(STORAGE_KEY_LEVEL, 2); // 默认级别 2, 即原版行为
     }
 
     async function saveBlockedUsers(usersData) {
         const userMap = new Map();
         usersData.forEach(user => userMap.set(user.name.toLowerCase(), user));
         const uniqueUsers = Array.from(userMap.values());
-        await GM_setValue(STORAGE_KEY, uniqueUsers);
+        await GM_setValue(STORAGE_KEY_USERS, uniqueUsers);
         blockedUsersData = uniqueUsers;
         console.log('[屏蔽脚本] 黑名单已更新:', blockedUsersData);
     }
+
+    // [修改] 新增: 保存屏蔽级别
+    async function saveBlockLevel(level) {
+        blockLevel = parseInt(level, 10);
+        await GM_setValue(STORAGE_KEY_LEVEL, blockLevel);
+        console.log('[屏蔽脚本] 屏蔽级别已更新:', blockLevel);
+    }
+
 
     function getBlockedUserNamesLower() {
         return blockedUsersData.map(u => u.name.trim().toLowerCase()).filter(Boolean);
@@ -62,6 +89,10 @@
 
     function runBlocker() {
         if (isBlockingDisabled) return;
+        // [修改] 检查级别开关
+        if (blockLevel < 1) return; // 级别0 = 关闭屏蔽
+
+        // level 1: 屏蔽帖子和主题作者
         const blockedLower = getBlockedUserNamesLower();
         if (blockedLower.length === 0) return;
         document.querySelectorAll('div.windowbg:not([data-gf-processed])').forEach(container => {
@@ -76,16 +107,30 @@
                 }
             }
         });
-        document.querySelectorAll(`${SELECTORS.quoteBlock}:not([data-gf-processed])`).forEach(quote => {
-            quote.setAttribute('data-gf-processed', 'true');
-            const citeElement = quote.querySelector(SELECTORS.quoteAuthorCite);
-            if (citeElement?.textContent) {
-                const match = citeElement.textContent.match(/引述:\s*([^ ]+)\s*于/);
-                if (match?.[1] && blockedLower.includes(match[1].trim().toLowerCase())) {
-                    quote.style.display = 'none';
+        // level 2: + 屏蔽1级引用 (原版行为)
+        if (blockLevel >= 2)
+            document.querySelectorAll(`${SELECTORS.standardQuoteBlock}:not([data-gf-processed])`).forEach(quote => {
+                quote.setAttribute('data-gf-processed', 'true');
+                const citeElement = quote.querySelector(SELECTORS.quoteAuthorCite);
+                if (citeElement?.textContent) {
+                    const match = citeElement.textContent.match(/引述:\s*([^ ]+)\s*于/);
+                    if (match?.[1] && blockedLower.includes(match[1].trim().toLowerCase())) {
+                        quote.style.display = 'none';
+                    }
                 }
-            }
-        });
+            });
+        // level 3: + 屏蔽全部子引用
+        if (blockLevel >= 3)
+            document.querySelectorAll(`${SELECTORS.alternateQuoteBlock}:not([data-gf-processed])`).forEach(quote => {
+                quote.setAttribute('data-gf-processed', 'true');
+                const citeElement = quote.querySelector(SELECTORS.quoteAuthorCite);
+                if (citeElement?.textContent) {
+                    const match = citeElement.textContent.match(/引述:\s*([^ ]+)\s*于/);
+                    if (match?.[1] && blockedLower.includes(match[1].trim().toLowerCase())) {
+                        quote.style.display = 'none';
+                    }
+                }
+            });
     }
 
     function injectBlockButtons() {
@@ -125,6 +170,10 @@
             .input-group { display: flex; gap: 5px; margin-bottom: 15px; }
             .input-group input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
             #blocker-add-btn { display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 10px 15px; border: none; color: white; cursor: pointer; font-size: 14px; font-weight: bold; background-color: #6a913a; border-radius: 6px; transition: opacity 0.2s; }
+            /* [修改] 新增: 下拉框的容器样式 */
+            .setting-group { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
+            .setting-group label { font-weight: bold; font-size: 14px; }
+            .setting-group select { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
             .panel-controls { display: flex; justify-content: space-between; margin-bottom: 10px; }
             #blocker-search { width: 60%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
             .sort-buttons button { display: flex; align-items: center; justify-content: center; background-color: #888; border-radius: 4px; padding: 8px 10px; font-size: 13px; margin-left: 5px; border: none; color: white; cursor: pointer; }
@@ -146,12 +195,16 @@
         const panel = document.createElement('div');
         panel.id = 'blocker-settings-panel';
         panel.innerHTML = `
-            <div class="panel-header"><span>高级用户屏蔽设置 (V2.6.1)</span><button id="blocker-close-btn">&times;</button></div>
+            <div class="panel-header"><span>高级用户屏蔽设置 (V1.0.3)</span><button id="blocker-close-btn">&times;</button></div>
             <div class="panel-body">
                 <div class="input-group">
                     <input type="text" id="blocker-new-user" placeholder="输入要屏蔽的用户名">
                     <input type="text" id="blocker-new-note" placeholder="可选备注">
                     <button id="blocker-add-btn">添加</button>
+                </div>
+                <div class="setting-group">
+                    <label for="blocker-level-select">屏蔽级别:</label>
+                    <select id="blocker-level-select"></select>
                 </div>
                 <div class="panel-controls">
                     <input type="text" id="blocker-search" placeholder="搜索黑名单...">
@@ -173,6 +226,15 @@
         `;
         document.body.appendChild(document.createElement('div')).id = 'blocker-overlay';
         document.body.appendChild(panel);
+
+        // [修改] 填充下拉框选项
+        const levelSelect = panel.querySelector('#blocker-level-select');
+        BLOCKING_MODES.forEach((mode, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = mode;
+            levelSelect.appendChild(option);
+        });
 
         const topInfo = document.querySelector('#top_info');
         if (topInfo) {
@@ -205,7 +267,8 @@
             importArea: document.getElementById('blocker-import-area'),
             searchBox: document.getElementById('blocker-search'),
             sortAscBtn: document.getElementById('sort-asc'),
-            sortDescBtn: document.getElementById('sort-desc')
+            sortDescBtn: document.getElementById('sort-desc'),
+            levelSelect: levelSelect // [修改] 添加对下拉框的引用
         };
         
         const addUser = () => {
@@ -299,7 +362,14 @@
             });
         }
 
-        const openSettingsPanel = () => { renderBlockedList(); ui.overlay.style.display = 'block'; panel.style.display = 'flex'; ui.userInput.focus(); };
+        // [修改] openSettingsPanel
+        const openSettingsPanel = () => { 
+            renderBlockedList(); 
+            ui.levelSelect.value = blockLevel; // [修改] 打开时, 同步当前屏蔽级别到下拉框
+            ui.overlay.style.display = 'block'; 
+            panel.style.display = 'flex'; 
+            ui.userInput.focus(); 
+        };
         const closePanel = () => { ui.overlay.style.display = 'none'; panel.style.display = 'none'; };
 
         ui.overlay.addEventListener('click', closePanel);
@@ -312,13 +382,24 @@
         ui.searchBox.addEventListener('input', renderBlockedList);
         ui.sortAscBtn.addEventListener('click', () => { currentSort = 'asc'; renderBlockedList(); });
         ui.sortDescBtn.addEventListener('click', () => { currentSort = 'desc'; renderBlockedList(); });
+        
+        // [修改] 新增: 屏蔽级别下拉框的事件监听
+        ui.levelSelect.addEventListener('change', async () => {
+            const newLevel = ui.levelSelect.value;
+            await saveBlockLevel(newLevel);
+            alert('屏蔽级别已保存。请刷新页面以应用所有更改。');
+            // 立即执行一次 runBlocker 尝试隐藏内容
+            runBlocker();
+            // 刷新是最好的, 但我们也可以先尝试就地执行
+        });
     }
 
     // ===============================================================
     // ======================  启动与监控  ===========================
     // ===============================================================
     async function main() {
-        await loadBlockedUsers();
+        // [修改] 调用新的加载函数
+        await loadSettings();
         setupGUI();
         
         const initialRun = () => {
